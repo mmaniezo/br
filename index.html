@@ -41,6 +41,8 @@
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.148.0/build/three.module.js';
     import { ARButton } from 'https://unpkg.com/three@0.148.0/examples/jsm/webxr/ARButton.js';
+    import { FontLoader } from 'https://unpkg.com/three@0.148.0/examples/jsm/loaders/FontLoader.js';
+    import { TextGeometry } from 'https://unpkg.com/three@0.148.0/examples/jsm/geometries/TextGeometry.js';
 
     let camera, scene, renderer;
     let controller;
@@ -112,9 +114,9 @@
 
       const textValue = document.getElementById('wordInput').value || "Local";
 
-      const loader = new THREE.FontLoader();
+      const loader = new FontLoader();
       loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function (font) {
-        const textGeo = new THREE.TextGeometry(textValue, {
+        const textGeo = new TextGeometry(textValue, {
           font: font,
           size: 0.2,
           height: 0.02
@@ -126,9 +128,7 @@
         pos.y += 1.5;
         textMesh.position.copy(pos);
 
-        const rotation = new THREE.Euler();
-        rotation.setFromRotationMatrix(reticle.matrix);
-        textMesh.rotation.copy(rotation);
+        textMesh.lookAt(camera.position);
 
         scene.add(textMesh);
       });
