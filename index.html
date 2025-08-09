@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
-  <title>WebXR AR Hit Test — Texto Voando</title>
+  <title>WebXR AR Hit Test — Cubo</title>
   <style>
     html,
     body {
@@ -34,15 +34,13 @@
 <body>
   <div id="info">
     <strong>WebXR AR Hit Test</strong><br>
-    Toque no retículo para colocar uma palavra voando.<br>
-    Palavra: <input type="text" id="wordInput" value="Local" style="width:100px">
+    Toque no retículo para colocar um cubo. Use um dispositivo compatível (Android + Chrome) e sirva via HTTPS /
+    localhost.
   </div>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.148.0/build/three.module.js';
     import { ARButton } from 'https://unpkg.com/three@0.148.0/examples/jsm/webxr/ARButton.js';
-    import { FontLoader } from 'https://unpkg.com/three@0.148.0/examples/jsm/loaders/FontLoader.js';
-    import { TextGeometry } from 'https://unpkg.com/three@0.148.0/examples/jsm/geometries/TextGeometry.js';
 
     let camera, scene, renderer;
     let controller;
@@ -62,10 +60,12 @@
 
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
+      // luz
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
+      // renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -74,6 +74,7 @@
 
       document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
+      // Reticle (pequeno anel que marca o ponto de hit)
       const geometry = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
       reticle = new THREE.Mesh(geometry, material);
@@ -81,24 +82,30 @@
       reticle.visible = false;
       scene.add(reticle);
 
+      // Controller para escutar 'select' (toque)
       controller = renderer.xr.getController(0);
       controller.addEventListener('select', onSelect);
       scene.add(controller);
 
       window.addEventListener('resize', onWindowResize);
 
+      // Gerenciar start/end da sessão para requisitar o hit test
       renderer.xr.addEventListener('sessionstart', onSessionStart);
       renderer.xr.addEventListener('sessionend', onSessionEnd);
     }
 
     function onSessionStart() {
       const session = renderer.xr.getSession();
-      session.requestReferenceSpace('viewer').then(viewerReferenceSpace => {
-        session.requestHitTestSource({ space: viewerReferenceSpace }).then(source => {
+
+      // pedir reference spaces
+      session.requestReferenceSpace('viewer').then(function (viewerReferenceSpace) {
+        session.requestHitTestSource({ space: viewerReferenceSpace }).then(function (source) {
           hitTestSource = source;
         });
       });
-      session.requestReferenceSpace('local').then(refSpace => {
+
+      // local para posicionamento das poses obtidas por getPose
+      session.requestReferenceSpace('local').then(function (refSpace) {
         localReferenceSpace = refSpace;
       });
     }
@@ -112,26 +119,20 @@
     function onSelect() {
       if (!reticle.visible) return;
 
-      const textValue = document.getElementById('wordInput').value || "Local";
+      // Criar um cubo e posicionar de acordo com o reticle
+      const boxGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      const boxMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.0 });
+      const box = new THREE.Mesh(boxGeo, boxMat);
 
-      const loader = new FontLoader();
-      loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function (font) {
-        const textGeo = new TextGeometry(textValue, {
-          font: font,
-          size: 0.2,
-          height: 0.02
-        });
-        const textMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-        const textMesh = new THREE.Mesh(textGeo, textMat);
+      // usar a matrix do reticle (que está em localReferenceSpace) para posicionar o cubo
+      box.position.setFromMatrixPosition(reticle.matrix);
 
-        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
-        pos.y += 1.5;
-        textMesh.position.copy(pos);
+      // girar o cubo para ficar alinhado com o chão
+      const rotation = new THREE.Euler();
+      rotation.setFromRotationMatrix(reticle.matrix);
+      box.rotation.x = 0; // opcional: alinhar ao chão
 
-        textMesh.lookAt(camera.position);
-
-        scene.add(textMesh);
-      });
+      scene.add(box);
     }
 
     function onWindowResize() {
@@ -140,6 +141,7 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
+    // loop de render
     function animate() {
       renderer.setAnimationLoop(render);
     }
@@ -147,11 +149,15 @@
     function render(timestamp, frame) {
       if (frame) {
         const referenceSpace = localReferenceSpace;
+
         if (hitTestSource && referenceSpace) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
+
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
             const pose = hit.getPose(referenceSpace);
+
+            // colocar reticle na pose retornada
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
           } else {
@@ -159,6 +165,7 @@
           }
         }
       }
+
       renderer.render(scene, camera);
     }
 
